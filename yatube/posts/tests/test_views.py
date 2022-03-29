@@ -101,7 +101,7 @@ class PostsViewsTests(TestCase):
             reverse('posts:group_list', kwargs={'slug': self.group.slug})
         )
         context = response.context['page_obj'].object_list
-        group = Group.objects.get(slug=self.group.slug)
+        group = self.group
         paginator = Paginator(group.posts.order_by('-created'), 10)
         expect_list = list(paginator.get_page(1).object_list)
         self.assertEqual(context, expect_list)
@@ -114,7 +114,7 @@ class PostsViewsTests(TestCase):
             reverse('posts:profile', kwargs={'username': self.user.username})
         )
         context = response.context['page_obj'].object_list
-        user = User.objects.get(username=self.user.username)
+        user = self.user
         paginator = Paginator(user.posts.order_by('-created'), 10)
         expect_list = list(paginator.get_page(1).object_list)
         self.assertEqual(context, expect_list)
@@ -164,8 +164,7 @@ class PostsViewsTests(TestCase):
     def test_index_page_contains_correct_context(self):
         """Доп. проверка страниц на содержание указанного поста."""
         expect_post = self.latest_post
-        pages_for_test = self.pages_for_test
-        for page in pages_for_test:
+        for page in self.pages_for_test:
             response = self.authorized_client.get(page)
             latest_object = response.context['page_obj'][0]
             fields_to_test = {
@@ -180,14 +179,12 @@ class PostsViewsTests(TestCase):
                     self.assertEqual(field, expect)
 
     def test_first_page_contains_ten_records(self):
-        pages_for_test = self.pages_for_test
-        for page in pages_for_test:
+        for page in self.pages_for_test:
             response = self.client.get(page)
             self.assertEqual(response.context['page_obj'].end_index(), 10)
 
     def test_second_page_contains_eight_records(self):
-        pages_for_test = self.pages_for_test
-        for page in pages_for_test:
+        for page in self.pages_for_test:
             response = self.client.get(page + '?page=2')
             self.assertEqual(response.context['page_obj'].end_index(), 17)
 
@@ -281,43 +278,40 @@ class PostsFollowTests(TestCase):
     def test_follow_users_for_authorized_client(self):
         """Авторизованный пользователь может подписываться """
         """на других пользователей и удалять их из подписок."""
-        test_user = PostsFollowTests.user
-        test_author = PostsFollowTests.author
         follow_counter = Follow.objects.count()
         self.assertRedirects(
             self.guest.get(reverse(
                 'posts:profile_follow',
-                kwargs={'username': test_author.username})
+                kwargs={'username': self.author.username})
             ),
             '/auth/login/?next=/profile/test_author_1/follow/'
         )
         self.authorized_client.get(reverse(
             'posts:profile_follow',
-            kwargs={'username': test_author.username})
+            kwargs={'username': self.author.username})
         )
         self.assertTrue(
             Follow.objects.filter(
-                user=test_user,
-                author=test_author
+                user=self.user,
+                author=self.author
             ).exists()
         )
         self.authorized_client.get(reverse(
             'posts:profile_unfollow',
-            kwargs={'username': test_author.username})
+            kwargs={'username': self.author.username})
         )
         self.assertEqual(Follow.objects.count(), follow_counter)
 
     def test_user_follow_posts_exist_at_desire_location(self):
         """Новая запись пользователя появляется в ленте тех, кто """
         """на него подписан и не появляется в ленте тех, кто не подписан."""
-        test_author = PostsFollowTests.author
         self.authorized_client.get(reverse(
             'posts:profile_follow',
-            kwargs={'username': test_author.username})
+            kwargs={'username': self.author.username})
         )
         Post.objects.create(
             text='text',
-            author=test_author,
+            author=self.author,
         )
         response = self.authorized_client.get(reverse('posts:follow_index'))
         content = response.context['page_obj'][1]

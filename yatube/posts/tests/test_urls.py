@@ -18,7 +18,7 @@ class PostsURLTests(TestCase):
         cls.post = Post.objects.create(
             text='Тестовый текст',
             author=cls.user,
-            group=Group.objects.get(id=1),
+            group=cls.group,
         )
         cls.urls_access_and_temlates = {
             '/': [False, 'posts/index.html'],
@@ -27,7 +27,6 @@ class PostsURLTests(TestCase):
             f'/profile/{cls.user.username}/': [False, 'posts/profile.html'],
             f'/posts/{cls.post.id}/': [False, 'posts/post_detail.html'],
             f'/posts/{cls.post.id}/edit/': [True, 'posts/create_post.html'],
-            '/unexsisting_page/': [False, 'core/404.html']
         }
 
     def setUp(self):
@@ -52,7 +51,6 @@ class PostsURLTests(TestCase):
                 not self.urls_access_and_temlates[url][0]
             )
         ]
-        print(no_auth_urls)
         for url in no_auth_urls:
             with self.subTest(address=url):
                 response = self.guest_client.get(url)
