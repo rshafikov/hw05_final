@@ -8,6 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.paginator import Paginator
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
 from posts.models import Follow, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
@@ -19,7 +20,7 @@ class PostsViewsTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.user = User.objects.create_user(username='HasNoName')
-        Group.objects.create(
+        cls.group = Group.objects.create(
             title='test group',
             slug='slug',
             description='description',
@@ -28,8 +29,27 @@ class PostsViewsTests(TestCase):
             Post.objects.create(
                 text=f'Текст поста #{i + 1}',
                 author=cls.user,
-                group=Group.objects.get(id=1),
+                group=cls.group
             )
+        cls.latest_post = Post.objects.latest('created')
+        cls.pages_for_test = [
+            reverse('posts:index'),
+            reverse('posts:profile', kwargs={'username': cls.user.username}),
+            reverse('posts:group_list', kwargs={'slug': cls.group.slug})
+        ]
+        cls.small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
+        )
+        cls.uploaded = SimpleUploadedFile(
+            name='small.gif',
+            content=cls.small_gif,
+            content_type='image/gif'
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -46,16 +66,16 @@ class PostsViewsTests(TestCase):
             reverse('posts:index'): 'posts/index.html',
             reverse('posts:post_create'): 'posts/create_post.html',
             reverse('posts:group_list',
-                    kwargs={'slug': 'slug'}
+                    kwargs={'slug': self.group.slug}
                     ): 'posts/group_list.html',
             reverse('posts:profile',
-                    kwargs={'username': 'HasNoName'}
+                    kwargs={'username': self.user.username}
                     ): 'posts/profile.html',
             reverse('posts:post_detail',
-                    kwargs={'post_id': 1}
+                    kwargs={'post_id': self.latest_post.id}
                     ): 'posts/post_detail.html',
             reverse('posts:post_edit',
-                    kwargs={'post_id': 1}
+                    kwargs={'post_id': self.latest_post.id}
                     ): 'posts/create_post.html',
         }
         for reverse_name, template in templates_page_names.items():
@@ -77,49 +97,45 @@ class PostsViewsTests(TestCase):
     def test_group_list_page_contains_correct_context_list(self):
         """View-функция group_list содержит в контексте список постов """
         """отфильтрованных по группе и корректный title."""
-        slug = 'slug'
-        expect_group = Group.objects.get(slug='slug', id=1)
         response = self.authorized_client.get(
-            reverse('posts:group_list', kwargs={'slug': slug})
+            reverse('posts:group_list', kwargs={'slug': self.group.slug})
         )
         context = response.context['page_obj'].object_list
-        group = Group.objects.get(slug=slug)
+        group = Group.objects.get(slug=self.group.slug)
         paginator = Paginator(group.posts.order_by('-created'), 10)
         expect_list = list(paginator.get_page(1).object_list)
         self.assertEqual(context, expect_list)
-        self.assertEqual(response.context['group'], expect_group)
+        self.assertEqual(response.context['group'], self.group)
 
     def test_profile_page_contains_correct_context_list(self):
         """View-функция profile содержит в контексте список """
         """постов отфильтрованных по пользователю и author."""
-        username = 'HasNoName'
-        expect_author = User.objects.get(username=username)
         response = self.authorized_client.get(
-            reverse('posts:profile', kwargs={'username': username})
+            reverse('posts:profile', kwargs={'username': self.user.username})
         )
         context = response.context['page_obj'].object_list
-        user = User.objects.get(username=username)
+        user = User.objects.get(username=self.user.username)
         paginator = Paginator(user.posts.order_by('-created'), 10)
         expect_list = list(paginator.get_page(1).object_list)
         self.assertEqual(context, expect_list)
-        self.assertEqual(response.context['author'], expect_author)
+        self.assertEqual(response.context['author'], self.user)
 
     def test_post_detail_page_context(self):
         """В профиль пользователя выводится корретный пост """
         """и счетчик постов у пользователя."""
-        post_id = 1
+        post = self.latest_post
         response = self.authorized_client.get(
-            reverse('posts:post_detail', kwargs={'post_id': post_id})
+            reverse('posts:post_detail', kwargs={'post_id': post.id})
         )
-        post = response.context['post']
-        expect = Post.objects.get(id=post_id)
-        expect_post_count = expect.author.posts.count()
-        self.assertEqual(post, expect)
-        self.assertEqual(response.context['post_count'], expect_post_count)
+        self.assertEqual(response.context['post'], post)
+        self.assertEqual(
+            response.context['post_count'],
+            post.author.posts.count()
+        )
 
     def test_post_edit_uses_correct_form(self):
         """Форма редактирования поста корректна."""
-        post_id = 1
+        post_id = self.latest_post.id
         response = self.authorized_client.get(
             reverse('posts:post_edit', kwargs={'post_id': post_id})
         )
@@ -147,62 +163,40 @@ class PostsViewsTests(TestCase):
 
     def test_index_page_contains_correct_context(self):
         """Доп. проверка страниц на содержание указанного поста."""
-        pages_for_test = [
-            reverse('posts:index'),
-            reverse('posts:profile', kwargs={'username': 'HasNoName'}),
-            reverse('posts:group_list', kwargs={'slug': 'slug'})
-        ]
+        expect_post = self.latest_post
+        pages_for_test = self.pages_for_test
         for page in pages_for_test:
             response = self.authorized_client.get(page)
-            first_object = response.context['page_obj'][0]
+            latest_object = response.context['page_obj'][0]
             fields_to_test = {
-                first_object.text: 'Текст поста #17',
-                first_object.author.username: 'HasNoName',
-                first_object.group.title: 'test group',
+                latest_object.text: expect_post.text,
+                latest_object.author.username: (
+                    expect_post.author.username
+                ),
+                latest_object.group.title: self.group.title,
             }
             for field, expect in fields_to_test.items():
                 with self.subTest(field=field):
                     self.assertEqual(field, expect)
 
     def test_first_page_contains_ten_records(self):
-        pages_for_test = [
-            reverse('posts:index'),
-            reverse('posts:profile', kwargs={'username': 'HasNoName'}),
-            reverse('posts:group_list', kwargs={'slug': 'slug'})
-        ]
+        pages_for_test = self.pages_for_test
         for page in pages_for_test:
             response = self.client.get(page)
             self.assertEqual(response.context['page_obj'].end_index(), 10)
 
     def test_second_page_contains_eight_records(self):
-        pages_for_test = [
-            reverse('posts:index'),
-            reverse('posts:profile', kwargs={'username': 'HasNoName'}),
-            reverse('posts:group_list', kwargs={'slug': 'slug'})
-        ]
+        pages_for_test = self.pages_for_test
         for page in pages_for_test:
             response = self.client.get(page + '?page=2')
             self.assertEqual(response.context['page_obj'].end_index(), 17)
 
     def test_image_exists_in_every_desired_location(self):
         """Изображение передается в контекст необходимых страниц"""
-        small_gif = (
-            b'\x47\x49\x46\x38\x39\x61\x02\x00'
-            b'\x01\x00\x80\x00\x00\x00\x00\x00'
-            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-            b'\x0A\x00\x3B'
-        )
-        uploaded = SimpleUploadedFile(
-            name='small.gif',
-            content=small_gif,
-            content_type='image/gif'
-        )
         form_data = {
             'text': 'test text',
-            'group': Group.objects.get(pk=1).pk,
-            'image': uploaded
+            'group': self.group.id,
+            'image': self.uploaded
         }
         self.authorized_client.post(
             reverse('posts:post_create'),
@@ -211,8 +205,8 @@ class PostsViewsTests(TestCase):
         )
         test_urls = [
             reverse('posts:index'),
-            reverse('posts:group_list', kwargs={'slug': 'slug'}),
-            reverse('posts:profile', kwargs={'username': 'HasNoName'}),
+            reverse('posts:group_list', kwargs={'slug': self.group.slug}),
+            reverse('posts:profile', kwargs={'username': self.user.username}),
             reverse('posts:post_detail', kwargs={'post_id': 18})
         ]
         for url in test_urls:
@@ -227,22 +221,27 @@ class PostsViewsTests(TestCase):
 
     def test_comment_exists_at_desired_location_after_create(self):
         """После успешной отправки комментарий появляется на странице поста"""
-        test_post = Post.objects.get(id=1)
-        comment_counter = test_post.comments.count()
+        comment_counter = self.latest_post.comments.count()
         form_data = {'text': 'just a simple comment'}
         response = self.authorized_client.post(
-            reverse('posts:add_comment', kwargs={'post_id': test_post.id}),
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': self.latest_post.id}
+            ),
             data=form_data,
             follow=True
         )
-        self.assertEqual(test_post.comments.count(), comment_counter + 1)
+        self.assertEqual(
+            self.latest_post.comments.count(),
+            comment_counter + 1
+        )
         comment_text = response.context['comments'][0].text
-        self.assertEqual(comment_text, 'just a simple comment')
+        self.assertEqual(comment_text, form_data['text'])
 
     def test_cache(self):
         test_post = Post.objects.create(
             text='test',
-            author=PostsViewsTests.user
+            author=self.user
         )
         cached_index = self.client.get(reverse('posts:index')).content
         test_post.delete()

@@ -39,10 +39,9 @@ def profile(request, username):
     paginator = Paginator(profile_posts, COUNT_DISPLAYED_OBJECTS)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    if request.user.is_authenticated:
-        following = True if user.following.filter(user=request.user) else False
-    else:
-        following = False
+    following = request.user.is_authenticated and (
+        user.following.filter(user=request.user)
+    )
     context = {
         'page_obj': page_obj,
         'author': user,
@@ -109,7 +108,6 @@ def add_comment(request, post_id):
 
 @login_required
 def follow_index(request):
-    # я не могу использовать get_list_or_404, т.к. тогда pytest не проходит
     user_follows_posts = Post.objects.filter(
         author__following__user=request.user
     )
@@ -134,5 +132,6 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
-    Follow.objects.filter(user=request.user, author=author).delete()
+    if Follow.objects.filter(user=request.user, author=author).exists():
+        Follow.objects.filter(user=request.user, author=author).delete()
     return redirect('posts:profile', author.username)

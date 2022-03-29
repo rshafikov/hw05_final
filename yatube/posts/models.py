@@ -1,6 +1,7 @@
-from core.models import DateAbstractModel
 from django.contrib.auth import get_user_model
 from django.db import models
+
+from core.models import DateAbstractModel
 
 User = get_user_model()
 
