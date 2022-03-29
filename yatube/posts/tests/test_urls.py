@@ -27,7 +27,6 @@ class PostsURLTests(TestCase):
             f'/profile/{cls.user.username}/': [False, 'posts/profile.html'],
             f'/posts/{cls.post.id}/': [False, 'posts/post_detail.html'],
             f'/posts/{cls.post.id}/edit/': [True, 'posts/create_post.html'],
-            '/unexsisting_page/': [False, 'core/404.html']
         }
 
     def setUp(self):
