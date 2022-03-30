@@ -314,5 +314,5 @@ class PostsFollowTests(TestCase):
             author=self.author,
         )
         response = self.authorized_client.get(reverse('posts:follow_index'))
-        content = response.context['page_obj'][1]
+        content = response.context['page_obj'][0]
         self.assertEqual(content.text, 'text')

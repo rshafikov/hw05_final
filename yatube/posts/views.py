@@ -110,7 +110,7 @@ def add_comment(request, post_id):
 def follow_index(request):
     user_follows_posts = Post.objects.filter(
         author__following__user=request.user
-    )
+    ).order_by('-created')
     paginator = Paginator(user_follows_posts, COUNT_DISPLAYED_OBJECTS)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
