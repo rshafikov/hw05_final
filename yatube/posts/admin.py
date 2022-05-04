@@ -8,7 +8,8 @@ class PostAdmin(admin.ModelAdmin):
                     'text',
                     'created',
                     'author',
-                    'group'
+                    'group',
+                    'image'
                     )
     search_fields = ('text',)
     list_filter = ('created',)

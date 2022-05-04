@@ -236,12 +236,8 @@ class PostsViewsTests(TestCase):
         self.assertEqual(comment_text, form_data['text'])
 
     def test_cache(self):
-        test_post = Post.objects.create(
-            text='test',
-            author=self.user
-        )
         cached_index = self.client.get(reverse('posts:index')).content
-        test_post.delete()
+        self.latest_post.delete
         self.assertEqual(
             cached_index,
             self.client.get(reverse('posts:index')).content
